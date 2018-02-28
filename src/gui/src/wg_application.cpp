@@ -28,7 +28,9 @@
 #include <iostream>
 #include <fstream>
 #include "cap32.h"
-
+#ifdef __LIBRETRO__
+extern int gui_poll_events(void);
+#endif
 // CPC emulation properties, defined in cap32.h:
 extern t_CPC CPC;
 // Video plugin, defined in video.h:
@@ -293,6 +295,9 @@ void CApplication::Exec()
 		m_AppLog.AddLogEntry("wGui Application entering Exec loop", APP_LOG_INFO);
 		while (m_bRunning)
 		{
+#ifdef __LIBRETRO__
+gui_poll_events();
+#endif
 			while (SDL_PollEvent(&event))
 			{
 				HandleSDLEvent(event);
@@ -304,6 +309,9 @@ void CApplication::Exec()
 					HandleSDLEvent(event);
 				}
 				SDL_Delay(5);
+#ifdef __LIBRETRO__
+gui_poll_events();
+#endif
 			}
 			CMessageServer::Instance().DeliverMessage();
 		}

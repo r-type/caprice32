@@ -50,6 +50,18 @@
 
 #include "savepng.h"
 
+#ifdef __LIBRETRO__ 
+extern uint32_t *videoBuffer;
+extern int NEWGAME_FROM_OSD,retrow,retroh;
+#define LIBCO_C 
+#include "libco/libco.h"
+extern cothread_t mainThread;
+extern cothread_t emuThread;
+extern int pauseg,SNDPAUSE;
+extern void retro_audiocb(signed short int *sound_buffer,int sndbufsize);
+bool bolDone;
+#endif 
+
 #define MAX_LINE_LEN 256
 
 #define MIN_SPEED_SETTING 2
@@ -71,9 +83,9 @@ extern t_new_dt new_dt;
 extern t_disk_format disk_format[];
 
 extern byte* pbCartridgePages[];
-
+#ifndef __LIBRETRO__
 SDL_AudioSpec *audio_spec = nullptr;
-
+#endif
 SDL_Surface *back_surface = nullptr;
 video_plugin* vid_plugin;
 SDL_Joystick* joysticks[MAX_NB_JOYSTICKS];
@@ -1222,12 +1234,13 @@ int audio_align_samples (int given)
 
 int audio_init ()
 {
+#ifndef __LIBRETRO__
    SDL_AudioSpec *desired, *obtained;
-
+#endif
    if (!CPC.snd_enabled) {
       return 0;
    }
-
+#ifndef __LIBRETRO__
    desired = static_cast<SDL_AudioSpec *>(malloc(sizeof(SDL_AudioSpec)));
    obtained = static_cast<SDL_AudioSpec *>(malloc(sizeof(SDL_AudioSpec)));
 
@@ -1247,6 +1260,9 @@ int audio_init ()
    audio_spec = obtained;
 
    CPC.snd_buffersize = audio_spec->size; // size is samples * channels * bytes per sample (1 or 2)
+#else
+   CPC.snd_buffersize = 4*882; 
+#endif
    pbSndBuffer = static_cast<byte *>(malloc(CPC.snd_buffersize)); // allocate the sound data buffer
    pbSndBufferEnd = pbSndBuffer + CPC.snd_buffersize;
    memset(pbSndBuffer, 0, CPC.snd_buffersize);
@@ -1265,13 +1281,17 @@ int audio_init ()
 
 void audio_shutdown ()
 {
+#ifndef __LIBRETRO__
    SDL_CloseAudio();
+#endif
    if (pbSndBuffer) {
       free(pbSndBuffer);
    }
+#ifndef __LIBRETRO__
    if (audio_spec) {
       free(audio_spec);
    }
+#endif
 }
 
 
@@ -1279,7 +1299,11 @@ void audio_shutdown ()
 void audio_pause ()
 {
    if (CPC.snd_enabled) {
+#ifndef __LIBRETRO__
       SDL_PauseAudio(1);
+#else
+      SNDPAUSE=1;
+#endif
    }
 }
 
@@ -1288,7 +1312,11 @@ void audio_pause ()
 void audio_resume ()
 {
    if (CPC.snd_enabled) {
+#ifndef __LIBRETRO__
       SDL_PauseAudio(0);
+#else
+	SNDPAUSE=0;
+#endif
    }
 }
 
@@ -1446,7 +1474,13 @@ int video_init ()
       std::cerr << "Could not set requested video mode: " << SDL_GetError() << std::endl;
       return ERR_VIDEO_SET_MODE;
    }
-
+#ifdef __LIBRETRO__ 
+	videoBuffer=(unsigned int *)back_surface->pixels;
+	printf("SDL screen obtain: %d x %d @ %d \n", back_surface->w, back_surface->h, back_surface->format->BitsPerPixel);
+	retrow=back_surface->w;
+	retroh=back_surface->h;
+	NEWGAME_FROM_OSD=2;
+#endif
    CPC.scr_bpp = back_surface->format->BitsPerPixel; // bit depth of the surface
    video_set_style(); // select rendering style
 
@@ -1910,13 +1944,18 @@ int cap32_main (int argc, char **argv)
 {
    dword dwOffset;
    int iExitCondition;
+#ifndef __LIBRETRO__
    bool bolDone;
+#endif
    SDL_Event event;
    std::vector<std::string> slot_list;
 
    parseArguments(argc, argv, slot_list, args);
-
+#ifndef __LIBRETRO__
    if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_NOPARACHUTE) < 0) { // initialize SDL
+#else
+   if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_NOPARACHUTE) < 0) { // 
+#endif
       fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError());
       exit(-1);
    }
@@ -2239,10 +2278,14 @@ int cap32_main (int argc, char **argv)
          if (CPC.limit_speed) { // limit to original CPC speed?
             if (CPC.snd_enabled) {
                if (iExitCondition == EC_SOUND_BUFFER) { // Emulation filled a sound buffer.
+#ifndef __LIBRETRO__
                   if (!dwSndBufferCopied) {
                      continue; // delay emulation until our audio callback copied and played the buffer
                   }
                   dwSndBufferCopied = 0;
+#else
+		retro_audiocb((int16_t*)pbSndBuffer,882);
+#endif
                }
             } else if (iExitCondition == EC_CYCLE_COUNT) {
                dwTicks = SDL_GetTicks();
@@ -2298,6 +2341,9 @@ int cap32_main (int argc, char **argv)
             asic_draw_sprites();
             vid_plugin->unlock();
             video_display(); // update PC display
+#ifdef __LIBRETRO__
+	    co_switch(mainThread);
+#endif
          } else {
             vid_plugin->unlock();
          }

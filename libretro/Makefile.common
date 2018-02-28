@@ -1,0 +1,141 @@
+SDLOBJ = $(CORE_DIR)/libretro
+
+SDLOBJS := \
+	$(SDLOBJ)/sdl-libretro/src/SDL_error.o $(SDLOBJ)/sdl-libretro/src/SDL_fatal.o \
+	$(SDLOBJ)/sdl-libretro/src/SDL.o $(SDLOBJ)/sdl-libretro/src/audio/SDL_wave.o \
+	$(SDLOBJ)/sdl-libretro/src/audio/SDL_audiodev.o $(SDLOBJ)/sdl-libretro/src/audio/SDL_mixer_MMX.o \
+	$(SDLOBJ)/sdl-libretro/src/audio/SDL_mixer_m68k.o $(SDLOBJ)/sdl-libretro/src/audio/SDL_audiocvt.o \
+	$(SDLOBJ)/sdl-libretro/src/audio/SDL_audio.o $(SDLOBJ)/sdl-libretro/src/audio/SDL_mixer.o \
+	$(SDLOBJ)/sdl-libretro/src/audio/SDL_mixer_MMX_VC.o $(SDLOBJ)/sdl-libretro/src/cdrom/SDL_cdrom.o \
+	$(SDLOBJ)/sdl-libretro/src/cpuinfo/SDL_cpuinfo.o $(SDLOBJ)/sdl-libretro/src/events/SDL_active.o \
+	$(SDLOBJ)/sdl-libretro/src/events/SDL_quit.o $(SDLOBJ)/sdl-libretro/src/events/SDL_mouse.o \
+	$(SDLOBJ)/sdl-libretro/src/events/SDL_events.o $(SDLOBJ)/sdl-libretro/src/events/SDL_keyboard.o \
+	$(SDLOBJ)/sdl-libretro/src/events/SDL_expose.o $(SDLOBJ)/sdl-libretro/src/events/SDL_resize.o \
+	$(SDLOBJ)/sdl-libretro/src/file/SDL_rwops.o $(SDLOBJ)/sdl-libretro/src/stdlib/SDL_string.o \
+	$(SDLOBJ)/sdl-libretro/src/stdlib/SDL_malloc.o $(SDLOBJ)/sdl-libretro/src/stdlib/SDL_iconv.o \
+	$(SDLOBJ)/sdl-libretro/src/stdlib/SDL_getenv.o $(SDLOBJ)/sdl-libretro/src/stdlib/SDL_qsort.o \
+	$(SDLOBJ)/sdl-libretro/src/stdlib/SDL_stdlib.o $(SDLOBJ)/sdl-libretro/src/thread/SDL_thread.o \
+	$(SDLOBJ)/sdl-libretro/src/timer/SDL_timer.o $(SDLOBJ)/sdl-libretro/src/video/SDL_cursor.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_blit_0.o $(SDLOBJ)/sdl-libretro/src/video/SDL_yuv.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_bmp.o $(SDLOBJ)/sdl-libretro/src/video/SDL_video.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_yuv_mmx.o $(SDLOBJ)/sdl-libretro/src/video/SDL_surface.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_pixels.o $(SDLOBJ)/sdl-libretro/src/video/SDL_stretch.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_blit_A.o $(SDLOBJ)/sdl-libretro/src/video/SDL_blit_N.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_blit_1.o $(SDLOBJ)/sdl-libretro/src/video/SDL_blit.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_yuv_sw.o $(SDLOBJ)/sdl-libretro/src/video/SDL_RLEaccel.o \
+	$(SDLOBJ)/sdl-libretro/src/video/SDL_gamma.o $(SDLOBJ)/sdl-libretro/src/joystick/SDL_joystick.o \
+	$(SDLOBJ)/sdl-libretro/src/video/libretro/SDL_LIBRETROmouse.o \
+	$(SDLOBJ)/sdl-libretro/src/video/libretro/SDL_LIBRETROevents.o \
+	$(SDLOBJ)/sdl-libretro/src/video/libretro/SDL_LIBRETROvideo.o \
+	$(SDLOBJ)/sdl-libretro/src/video/libretro/SDL_LIBRETROkeyboard.o $(SDLOBJ)/sdl-libretro/src/joystick/libretro/SDL_sysjoystick.o \
+	$(SDLOBJ)/sdl-libretro/src/audio/libretro/SDL_LIBRETROaudio.o \
+	$(SDLOBJ)/sdl-libretro/src/loadso/dummy/SDL_sysloadso.o 
+
+ifeq ($(platform), unix)
+SDLOBJS += $(SDLOBJ)/sdl-libretro/src/cdrom/linux/SDL_syscdrom.o \
+$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_syscond.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_syssem.o $(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_sysmutex.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_systhread.o  \
+	$(SDLOBJ)/sdl-libretro/src/timer/libretro/SDL_systimer.o 
+endif
+
+ifeq ($(platform), win)
+SDLOBJS += $(SDLOBJ)/sdl-libretro/src/cdrom/win32/SDL_syscdrom.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/generic/SDL_syscond.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_syssem.o $(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_sysmutex.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_systhread.o \
+	$(SDLOBJ)/sdl-libretro/src/timer/win32/SDL_systimer.o 
+endif
+
+
+ifeq ($(platform), wincross64)
+SDLOBJS += $(SDLOBJ)/sdl-libretro/src/cdrom/win32/SDL_syscdrom.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/generic/SDL_syscond.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_syssem.o $(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_sysmutex.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/win32/SDL_systhread.o \
+	$(SDLOBJ)/sdl-libretro/src/timer/win32/SDL_systimer.o 
+endif
+
+ifeq ($(platform), wiiu)
+SDLOBJS += $(SDLOBJ)/sdl-libretro/src/cdrom/dummy/SDL_syscdrom.o\
+	$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_syscond.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_syssem.o $(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_sysmutex.o \
+	$(SDLOBJ)/sdl-libretro/src/thread/pthread/SDL_systhread.o   \
+	$(SDLOBJ)/sdl-libretro/src/timer/libretro/SDL_systimer.o 
+endif
+
+#SDLOBJS += $(SDLOBJ)/sdl-libretro/SDL_ttf.o
+
+CAP32_OBJS = \
+$(CORE_DIR)/libretro/main.o \
+$(CORE_DIR)/src/cartridge.o \
+$(CORE_DIR)/src/savepng.o \
+$(CORE_DIR)/src/keyboard.o \
+$(CORE_DIR)/src/video.o \
+$(CORE_DIR)/src/log.o \
+$(CORE_DIR)/src/psg.o \
+$(CORE_DIR)/src/ipf.o \
+$(CORE_DIR)/src/gui/src/wg_message_client.o \
+$(CORE_DIR)/src/gui/src/wg_menu.o \
+$(CORE_DIR)/src/gui/src/wg_listbox.o \
+$(CORE_DIR)/src/gui/src/wg_textbox.o \
+$(CORE_DIR)/src/gui/src/CapriceLoadSave.o \
+$(CORE_DIR)/src/gui/src/wg_tab.o \
+$(CORE_DIR)/src/gui/src/wg_point.o \
+$(CORE_DIR)/src/gui/src/wg_message.o \
+$(CORE_DIR)/src/gui/src/wg_scrollbar.o \
+$(CORE_DIR)/src/gui/src/CapriceGuiView.o \
+$(CORE_DIR)/src/gui/src/wg_timer.o \
+$(CORE_DIR)/src/gui/src/wg_button.o \
+$(CORE_DIR)/src/gui/src/CapriceRomSlots.o \
+$(CORE_DIR)/src/gui/src/wg_window.o \
+$(CORE_DIR)/src/gui/src/wutil_log.o \
+$(CORE_DIR)/src/gui/src/CapriceVKeyboardView.o \
+$(CORE_DIR)/src/gui/src/CapriceAbout.o \
+$(CORE_DIR)/src/gui/src/wg_message_server.o \
+$(CORE_DIR)/src/gui/src/wg_editbox.o \
+$(CORE_DIR)/src/gui/src/CapriceMemoryTool.o \
+$(CORE_DIR)/src/gui/src/wg_frame.o \
+$(CORE_DIR)/src/gui/src/wg_messagebox.o \
+$(CORE_DIR)/src/gui/src/wg_fontengine.o \
+$(CORE_DIR)/src/gui/src/wg_progress.o \
+$(CORE_DIR)/src/gui/src/wg_checkbox.o \
+$(CORE_DIR)/src/gui/src/wg_dropdown.o \
+$(CORE_DIR)/src/gui/src/CapriceOptions.o \
+$(CORE_DIR)/src/gui/src/wg_application.o \
+$(CORE_DIR)/src/gui/src/wg_renderedstring.o \
+$(CORE_DIR)/src/gui/src/wg_picture.o \
+$(CORE_DIR)/src/gui/src/wg_resources.o \
+$(CORE_DIR)/src/gui/src/wg_toolbar.o \
+$(CORE_DIR)/src/gui/src/wg_rect.o \
+$(CORE_DIR)/src/gui/src/wg_radiobutton.o \
+$(CORE_DIR)/src/gui/src/wg_color.o \
+$(CORE_DIR)/src/gui/src/CapriceMenu.o \
+$(CORE_DIR)/src/gui/src/wg_tooltip.o \
+$(CORE_DIR)/src/gui/src/wg_groupbox.o \
+$(CORE_DIR)/src/gui/src/CapriceVKeyboard.o \
+$(CORE_DIR)/src/gui/src/std_ex.o \
+$(CORE_DIR)/src/gui/src/CapriceGui.o \
+$(CORE_DIR)/src/gui/src/wg_view.o \
+$(CORE_DIR)/src/gui/src/wg_painter.o \
+$(CORE_DIR)/src/gui/src/wg_resource_handle.o \
+$(CORE_DIR)/src/gui/src/wg_navigationbar.o \
+$(CORE_DIR)/src/gui/src/wg_label.o \
+$(CORE_DIR)/src/fileutils.o \
+$(CORE_DIR)/src/zip.o \
+$(CORE_DIR)/src/crtc.o \
+$(CORE_DIR)/src/asic.o \
+$(CORE_DIR)/src/stringutils.o \
+$(CORE_DIR)/src/tape.o \
+$(CORE_DIR)/src/z80.o \
+$(CORE_DIR)/src/glfuncs.o \
+$(CORE_DIR)/src/argparse.o \
+$(CORE_DIR)/src/cap32.o \
+$(CORE_DIR)/src/fdc.o \
+$(CORE_DIR)/src/slotshandler.o \
+$(CORE_DIR)/src/configuration.o \
+$(CORE_DIR)/libretro/libcpccat/fs.o \
+$(CORE_DIR)/libretro/kbdauto.o
+
+COBJS = $(CAP32_OBJS)  $(SDLOBJS) 
+
