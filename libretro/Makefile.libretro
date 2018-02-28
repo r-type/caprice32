@@ -20,8 +20,8 @@ ifeq ($(platform), unix)
 	CC = gcc
 	CXX = g++
 	AR = ar
-	CFLAGS = -O2 -Iinclude -D_GNU_SOURCE=1 -D__LIBRETRO__ -DHAVE_POW -DHAVE_MMAP=0 
-	CXXFLAGS = -g -O2  -fno-merge-constants 
+	CFLAGS = -O2 -Iinclude -D_GNU_SOURCE=1 -DHAVE_POW -DHAVE_MMAP=0 
+	CXXFLAGS = -O2 
 	TARGET := $(TARGET_NAME)_libretro.so
 	fpic := -fPIC
 #	SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T
@@ -111,7 +111,7 @@ include Makefile.common
 OBJECTS = $(COBJS) $(CORE_DIR)/libretro/libretro.o
 
 ifeq ($(DEBUG), 0)
-   FLAGS += -O3 -DNDEBUG 
+   FLAGS += -O2 -DNDEBUG -funroll-loops -ffast-math -fomit-frame-pointer -fno-strength-reduce -finline-functions -s
 else
    FLAGS += -O0 -g
 endif
