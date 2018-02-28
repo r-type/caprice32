@@ -59,6 +59,7 @@ extern cothread_t mainThread;
 extern cothread_t emuThread;
 extern int pauseg,SNDPAUSE;
 extern void retro_audiocb(signed short int *sound_buffer,int sndbufsize);
+extern char retro_system_data[512];
 bool bolDone;
 #endif 
 
@@ -1609,7 +1610,11 @@ std::string getConfigurationFilename(bool forWrite)
 {
   // First look in any user supplied configuration file path
   std::string configFilename = args.cfgFilePath;
+
   if(access(configFilename.c_str(), F_OK) != 0) {
+#ifdef __LIBRETRO__
+     configFilename = std::string(retro_system_data) + "/cap32.cfg";
+#else
      // If not found, cap32.cfg in the same directory as the executable
      configFilename = std::string(chAppPath) + "/cap32.cfg";
      // If not found, look for .cap32.cfg in the home of current user
@@ -1620,6 +1625,7 @@ std::string getConfigurationFilename(bool forWrite)
            configFilename = "/etc/cap32.cfg";
         }
      }
+#endif
   }
   std::cout << "Using configuration file" << (forWrite ? " to save" : "") << ": " << configFilename << std::endl;
   return configFilename;
@@ -1960,12 +1966,14 @@ int cap32_main (int argc, char **argv)
       exit(-1);
    }
    atexit(doCleanUp); // install the clean up routine
-
+#ifndef __LIBRETRO__
    if(getcwd(chAppPath, sizeof(chAppPath)-1) == nullptr) { // get the location of the executable
       fprintf(stderr, "getcwd failed: %s\n", strerror(errno));
       exit(-1);
    }
-
+#else
+	sprintf(chAppPath,"%s\0",retro_system_data);
+#endif
    loadConfiguration(CPC, getConfigurationFilename()); // retrieve the emulator configuration
    if (CPC.printer) {
       if (!printer_start()) { // start capturing printer output, if enabled
