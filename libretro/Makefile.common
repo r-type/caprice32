@@ -74,6 +74,7 @@ $(CORE_DIR)/src/keyboard.o \
 $(CORE_DIR)/src/video.o \
 $(CORE_DIR)/src/log.o \
 $(CORE_DIR)/src/psg.o \
+$(CORE_DIR)/src/disk.o \
 $(CORE_DIR)/src/ipf.o \
 $(CORE_DIR)/src/gui/src/wg_message_client.o \
 $(CORE_DIR)/src/gui/src/wg_menu.o \

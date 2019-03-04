@@ -16,3 +16,8 @@ debian/caprice32.postrm.debhelper
 debian/caprice32.substvars
 debian/caprice32/
 debian/files
+*.o
+*.so
+*.exe
+libretro/wGui.log
+
