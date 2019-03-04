@@ -16,6 +16,7 @@
 
 # To be overridden for debian packaging
 VERSION=latest
+REVISION=0
 
 LAST_BUILD_IN_DEBUG = $(shell [ -e .debug ] && echo 1 || echo 0)
 # If compiling under native windows, set WINE to ""
@@ -45,21 +46,22 @@ IPATHS = -Isrc/ -Isrc/gui/includes -I$(MINGW_PATH)/include -I$(MINGW_PATH)/inclu
 LIBS = $(MINGW_PATH)/lib/libSDL.dll.a $(MINGW_PATH)/lib/libfreetype.dll.a $(MINGW_PATH)/lib/libz.dll.a $(MINGW_PATH)/lib/libpng16.dll.a $(MINGW_PATH)/lib/libpng.dll.a
 COMMON_CFLAGS = -DWINDOWS
 CXX = $(TRIPLE)-g++
-ifdef WITH_IPF
-COMMON_CFLAGS += -DWITH_IPF
-LIBS += $(MINGW_PATH)/bin/$(CAPSIPFDLL)
-endif
+
 else
 prefix = /usr/local
 TARGET = cap32
 TEST_TARGET = test_runner
-IPATHS = -Isrc/ -Isrc/gui/includes `freetype-config --cflags` `sdl-config --cflags` `pkg-config --cflags libpng`
-LIBS = `sdl-config --libs` -lz `freetype-config --libs` `pkg-config --libs libpng`
+IPATHS = -Isrc/ -Isrc/gui/includes `pkg-config --cflags freetype2` `sdl-config --cflags` `pkg-config --cflags libpng`
+LIBS = `sdl-config --libs` -lz `pkg-config --libs freetype2` `pkg-config --libs libpng`
 CXX ?= g++
+COMMON_CFLAGS = -fPIC
+ifdef WITH_IPF
+LIBS += -ldl
+endif
+endif
+
 ifdef WITH_IPF
 COMMON_CFLAGS += -DWITH_IPF
-LIBS += -lcapsimage
-endif
 endif
 
 ifndef RELEASE
@@ -91,7 +93,7 @@ TEST_HEADERS:=$(shell find $(TSTDIR) -name \*.h)
 TEST_DEPENDS:=$(foreach file,$(TEST_SOURCES:.cpp=.d),$(shell echo "$(OBJDIR)/$(file)"))
 TEST_OBJECTS:=$(TEST_DEPENDS:.d=.o)
 
-.PHONY: all check_deps clean debug debug_flag distrib doc unit_test install
+.PHONY: all check_deps clean deb_pkg debug debug_flag distrib doc unit_test install
 
 WARNINGS = -Wall -Wextra -Wzero-as-null-pointer-constant -Wformat=2 -Wold-style-cast -Wmissing-include-dirs -Wlogical-op -Woverloaded-virtual -Wpointer-arith -Wredundant-decls
 COMMON_CFLAGS += $(CFLAGS) -std=c++11 $(IPATHS)
@@ -145,7 +147,7 @@ endif
 ifeq ($(PLATFORM),linux)
 check_deps:
 	@sdl-config --cflags >/dev/null 2>&1 || (echo "Error: missing dependency libsdl-1.2. Try installing libsdl 1.2 development package (e.g: libsdl1.2-dev)" && false)
-	@freetype-config --cflags >/dev/null 2>&1 || (echo "Error: missing dependency libfreetype. Try installing libfreetype development package (e.g: libfreetype6-dev)" && false)
+	@pkg-config --cflags freetype2 >/dev/null 2>&1 || (echo "Error: missing dependency libfreetype. Try installing libfreetype development package (e.g: libfreetype6-dev)" && false)
 	@pkg-config --cflags zlib >/dev/null 2>&1 || (echo "Error: missing dependency zlib. Try installing zlib development package (e.g: zlib-devel)" && false)
 	@pkg-config --cflags libpng >/dev/null 2>&1 || (echo "Error: missing dependency libpng. Try installing libpng development package (e.g: libpng-devel)" && false)
 else
@@ -217,8 +219,9 @@ endif
 googletest:
 	@[ -d googletest ] || git clone https://github.com/google/googletest.git
 
-TEST_CFLAGS = $(COMMON_CFLAGS) -I$(GTEST_DIR)/include -I$(GTEST_DIR)
+TEST_CFLAGS = $(COMMON_CFLAGS) -I$(GTEST_DIR)/include -I$(GTEST_DIR) -I$(GMOCK_DIR)/include -I$(GMOCK_DIR)
 GTEST_DIR = googletest/googletest/
+GMOCK_DIR = googletest/googlemock/
 
 $(TEST_DEPENDS): $(OBJDIR)/%.d: %.cpp
 	@echo Computing dependencies for $<
@@ -232,8 +235,12 @@ $(OBJDIR)/$(GTEST_DIR)/src/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc googletest
 	@mkdir -p `dirname $@`
 	$(CXX) -c $(BUILD_FLAGS) $(TEST_CFLAGS) -o $@ $<
 
-$(TEST_TARGET): $(OBJECTS) $(TEST_OBJECTS) $(OBJDIR)/$(GTEST_DIR)/src/gtest-all.o
-	$(CXX) $(LDFLAGS) -o $(TEST_TARGET) $(OBJDIR)/$(GTEST_DIR)/src/gtest-all.o $(TEST_OBJECTS) $(OBJECTS) $(LIBS) -lpthread
+$(OBJDIR)/$(GMOCK_DIR)/src/gmock-all.o: $(GMOCK_DIR)/src/gmock-all.cc googletest
+	@mkdir -p `dirname $@`
+	$(CXX) -c $(BUILD_FLAGS) $(TEST_CFLAGS) -o $@ $<
+
+$(TEST_TARGET): $(OBJECTS) $(TEST_OBJECTS) $(OBJDIR)/$(GTEST_DIR)/src/gtest-all.o $(OBJDIR)/$(GMOCK_DIR)/src/gmock-all.o
+	$(CXX) $(LDFLAGS) -o $(TEST_TARGET) $(OBJDIR)/$(GTEST_DIR)/src/gtest-all.o $(OBJDIR)/$(GMOCK_DIR)/src/gmock-all.o $(TEST_OBJECTS) $(OBJECTS) $(LIBS) -lpthread
 
 ifeq ($(PLATFORM),windows)
 unit_test: $(TEST_TARGET)
@@ -248,6 +255,12 @@ unit_test: $(TEST_TARGET)
 e2e_test: $(TARGET)
 	cd test/integrated && ./run_tests.sh
 endif
+
+deb_pkg: all
+	# Both changelog files need to be patched with the proper version !
+	sed -i "1s/(.*)/($(VERSION)-$(REVISION))/" debian/changelog
+	sed -i "1s/(.*)/($(VERSION)-$(REVISION))/" release/cap32-linux/caprice32-$(VERSION)/debian/changelog
+	cd release/cap32-linux/caprice32-$(VERSION)/debian && debuild -us -uc --lintian-opts --profile debian
 
 clang-tidy:
 	if $(CLANG_TIDY) -checks=-*,$(CLANG_CHECKS) $(SOURCES) -header-filter=src/* -- $(COMMON_CFLAGS) | grep "."; then false; fi

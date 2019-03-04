@@ -1,13 +1,21 @@
 version: '{build}'
 
+# In the end, all the efforts to make the date of the release progress didn't work.
+# Just make the tag progress by deleting/recreating it but do not rebuild it.
+branches:
+ except:
+  - latest
+
 environment:
+  access_token:
+    secure: xEnxvlt8zNDwbgUO0uVJMmQGJS7k3sl28jxyJkLCRxGwnVgd49hkVqukPq2X4TpB
   MSYS2_BASEVER: 20161025
   MSYS2_ARCH: x86_64
   MSYS2_URL: "http://kent.dl.sourceforge.net/project/msys2/Base/%MSYS2_ARCH%/msys2-base-%MSYS2_ARCH%-%MSYS2_BASEVER%.tar.xz"
   MSYS2_ARCHIVE: msys2.tar.xz
   MSYS2_SUBARCHIVE: msys2.tar
   IPF_LINUX_URL: "http://www.softpres.org/_media/files:ipflib42_linux-i686.tar.gz"
-  PACKAGES: "make zip %ARCH_PACKAGES%" 
+  PACKAGES: "make zip %ARCH_PACKAGES%"
   matrix:
     - MINGW_DIR: "/mingw64"
       WINARCH: win64
@@ -58,17 +66,39 @@ build_script:
 - msys64\usr\bin\bash -lc "cd c:/projects/caprice32 && PATH=$PATH:%MINGW_DIR%/bin make ARCH=%WINARCh% clean"
 - msys64\usr\bin\bash -lc "cd c:/projects/caprice32 && PATH=$PATH:%MINGW_DIR%/bin make ARCH=%WINARCH% MINGW_PATH=\"%MINGW_DIR%\" WITH_IPF=true CFLAGS=-Ii686-linux-gnu-capsimage/include"
 - msys64\usr\bin\bash -lc "cd c:/projects/caprice32 && PATH=$PATH:%MINGW_DIR%/bin make ARCH=%WINARCH% MINGW_PATH=\"%MINGW_DIR%\" WINE=\"\" WITH_IPF=true CFLAGS=-Ii686-linux-gnu-capsimage/include unit_test"
+# ======
+# = 4- Delete and recreate latest tag to trigger the 2nd build that will update the release date (https://github.com/appveyor/ci/issues/827)
+# =    Only do it for build on master branch to avoid looping !
+# ====
+- ps: |
+    if ($env:APPVEYOR_REPO_TAG -eq "false") {
+      try {
+        git config --global credential.helper store
+        Add-Content "$HOME\.git-credentials" "https://$($env:access_token):x-oauth-basic@github.com`n"
+        git tag -d latest
+        git tag latest HEAD
+        git push -q -f origin latest
+        if (-not $?) {
+          throw "git push failed ..."
+        }
+      } catch {
+        Write-Output "Deletion of tag latest failed, ignoring."
+      }
+    }
 
 artifacts:
 - path: "release\\cap32-%WINARCH%.zip"
   name: cap32-%WINARCH%.zip
 
 deploy:
+# Ugly hack for https://github.com/appveyor/ci/issues/827
+# We build 2 times.
+# 1st build: a pre-release on master at each commit, marking the release as prerelease and setting tag 'latest'.
 - release: "Caprice32 latest"
   tag: latest
   description: "Latest build of Caprice 32, with the newest cool features and the most recent bugs."
   provider: GitHub
-  auth_token: 
+  auth_token:
     secure: xEnxvlt8zNDwbgUO0uVJMmQGJS7k3sl28jxyJkLCRxGwnVgd49hkVqukPq2X4TpB
   artifact: cap32-%WINARCH%.zip
   draft: false
@@ -76,10 +106,26 @@ deploy:
   force_update: true
   on:
     branch: master
+
+# 2nd build: a release from 'latest' tag. The only purpose of this release is to update the release date
+#- release: "Caprice32 latest"
+#  tag: latest
+#  description: "Latest build of Caprice 32, with the newest cool features and the most recent bugs."
+#  provider: GitHub
+#  auth_token:
+#    secure: xEnxvlt8zNDwbgUO0uVJMmQGJS7k3sl28jxyJkLCRxGwnVgd49hkVqukPq2X4TpB
+#  artifact: cap32-%WINARCH%.zip
+#  draft: false
+#  prerelease: false
+#  force_update: true
+#  on:
+#    branch: latest
+
+# This deployment is for tagged versions (e.g: v4.4.0)
 - release: "Caprice32 %APPVEYOR_REPO_TAG_NAME%"
   tag: "%APPVEYOR_REPO_TAG_NAME%"
   provider: GitHub
-  auth_token: 
+  auth_token:
     secure: xEnxvlt8zNDwbgUO0uVJMmQGJS7k3sl28jxyJkLCRxGwnVgd49hkVqukPq2X4TpB
   artifact: cap32-%WINARCH%.zip
   draft: false

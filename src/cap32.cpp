@@ -25,6 +25,7 @@
 
 #include "cap32.h"
 #include "crtc.h"
+#include "disk.h"
 #include "tape.h"
 #include "video.h"
 #include "z80.h"
@@ -306,7 +307,7 @@ void ga_memory_manager ()
          membank_read[GateArray.lower_ROM_bank] = pbROMlo; // 'page in' lower ROM
       }
    }
-   if (CPC.model >= 3 && GateArray.registerPageOn) {
+   if (CPC.model > 2 && GateArray.registerPageOn) {
       membank_read[1] = pbRegisterPage;
       membank_write[1] = pbRegisterPage;
    }
@@ -466,7 +467,7 @@ void z80_OUT_handler (reg_pair port, byte val)
             }
             break;
          case 2: // set mode
-            if (!asic.locked && (val & 0x20) && CPC.model > 2) {
+            if (!asic.locked && (val & 0x20)) {
                // 6128+ RMR2 register
                int membank = (val >> 3) & 3;
                if (membank == 3) { // Map register page at 0x4000
@@ -502,22 +503,17 @@ void z80_OUT_handler (reg_pair port, byte val)
             }
             break;
          case 3: // set memory configuration
-            if (asic.locked) {
-               #ifdef DEBUG_GA
-               if (dwDebugFlag) {
-                  fprintf(pfoDebug, "mem 0x%02x\r\n", val);
-               }
-               #endif
-               LOG_DEBUG("RAM config: " << static_cast<int>(val));
-               GateArray.RAM_config = val;
-               ga_memory_manager();
-               if (CPC.mf2) { // MF2 enabled?
-                  *(pbMF2ROM + 0x03fff) = val;
-               }
-            } else {
-               // 6128+ memory mapping register
-               LOG_DEBUG("Memory mapping register (RAM)");
-            }
+             #ifdef DEBUG_GA
+             if (dwDebugFlag) {
+                fprintf(pfoDebug, "mem 0x%02x\r\n", val);
+             }
+             #endif
+             LOG_DEBUG("RAM config: " << static_cast<int>(val));
+             GateArray.RAM_config = val;
+             ga_memory_manager();
+             if (CPC.mf2) { // MF2 enabled?
+                *(pbMF2ROM + 0x03fff) = val;
+             }
             break;
       }
    }
@@ -526,7 +522,9 @@ void z80_OUT_handler (reg_pair port, byte val)
       byte crtc_port = port.b.h & 3;
       if (crtc_port == 0) { // CRTC register select?
          // 6128+: this is where we detect the ASIC (un)locking sequence
-         asic_poke_lock_sequence(val);
+         if (CPC.model > 2) {
+           asic_poke_lock_sequence(val);
+         }
          CRTC.reg_select = val;
          if (CPC.mf2) { // MF2 enabled?
             *(pbMF2ROM + 0x03cff) = val;
@@ -786,138 +784,135 @@ void z80_OUT_handler (reg_pair port, byte val)
 
 
 
-void print (dword *pdwAddr, const char *pchStr, bool bolColour)
+void print (byte *pbAddr, const char *pchStr, bool bolColour)
 {
    int iLen, iIdx;
    dword dwColour;
    word wColour;
    byte bRow, bColour;
+   byte *pbLine, *pbPixel;
 
+   iLen = strlen(pchStr); // number of characters to process
    switch (CPC.scr_bpp)
    {
       case 32:
          dwColour = bolColour ? 0x00ffffff : 0;
-         iLen = strlen(pchStr); // number of characters to process
          for (int n = 0; n < iLen; n++) {
-            dword *pdwLine, *pdwPixel;
             iIdx = static_cast<int>(pchStr[n]); // get the ASCII value
             if ((iIdx < FNT_MIN_CHAR) || (iIdx > FNT_MAX_CHAR)) { // limit it to the range of chars in the font
                iIdx = FNT_BAD_CHAR;
             }
             iIdx -= FNT_MIN_CHAR; // zero base the index
-            pdwLine = pdwAddr; // keep a reference to the current screen position
+            pbLine = pbAddr; // keep a reference to the current screen position
             for (int iRow = 0; iRow < FNT_CHAR_HEIGHT; iRow++) { // loop for all rows in the font character
-               pdwPixel = pdwLine;
+               pbPixel = pbLine;
                bRow = bFont[iIdx]; // get the bitmap information for one row
                for (int iCol = 0; iCol < FNT_CHAR_WIDTH; iCol++) { // loop for all columns in the font character
                   if (bRow & 0x80) { // is the bit set?
-                     *(pdwPixel+1) = 0; // draw the "shadow"
-                     *(pdwPixel+CPC.scr_line_offs) = 0;
-                     *(pdwPixel+CPC.scr_line_offs+1) = 0;
-                     *pdwPixel = dwColour; // draw the character pixel
+                     *(reinterpret_cast<dword*>(pbPixel)+1) = 0; // draw the "shadow"
+                     *(reinterpret_cast<dword*>(pbPixel+CPC.scr_line_offs+1)) = 0;
+                     *(reinterpret_cast<dword*>(pbPixel+CPC.scr_line_offs)) = 0;
+                     *(reinterpret_cast<dword*>(pbPixel)) = dwColour; // draw the character pixel
+                     *(reinterpret_cast<dword *>(pbPixel+CPC.scr_bps)) = dwColour; // draw the second line in case dwYScale == 2 (will be overwritten by shadow otherwise)
                   }
-                  pdwPixel++; // update the screen position
+                  pbPixel += 4; // update the screen position
                   bRow <<= 1; // advance to the next bit
                }
-               pdwLine += CPC.scr_line_offs; // advance to next screen line
+               pbLine += CPC.scr_line_offs; // advance to next screen line
                iIdx += FNT_CHARS; // advance to next row in font data
             }
-            pdwAddr += FNT_CHAR_WIDTH; // set screen address to next character position
+            pbAddr += FNT_CHAR_WIDTH*4; // set screen address to next character position
          }
          break;
 
       case 24:
          dwColour = bolColour ? 0x00ffffff : 0;
-         iLen = strlen(pchStr); // number of characters to process
          for (int n = 0; n < iLen; n++) {
-            dword *pdwLine;
-            byte *pbPixel;
             iIdx = static_cast<int>(pchStr[n]); // get the ASCII value
             if ((iIdx < FNT_MIN_CHAR) || (iIdx > FNT_MAX_CHAR)) { // limit it to the range of chars in the font
                iIdx = FNT_BAD_CHAR;
             }
             iIdx -= FNT_MIN_CHAR; // zero base the index
-            pdwLine = pdwAddr; // keep a reference to the current screen position
+            pbLine = pbAddr; // keep a reference to the current screen position
             for (int iRow = 0; iRow < FNT_CHAR_HEIGHT; iRow++) { // loop for all rows in the font character
-               pbPixel = reinterpret_cast<byte *>(pdwLine);
+               pbPixel = pbLine;
                bRow = bFont[iIdx]; // get the bitmap information for one row
                for (int iCol = 0; iCol < FNT_CHAR_WIDTH; iCol++) { // loop for all columns in the font character
                   if (bRow & 0x80) { // is the bit set?
-                     *(reinterpret_cast<dword *>(pbPixel+CPC.scr_line_offs)) = 0; // draw the "shadow"
-                     *reinterpret_cast<dword *>(pbPixel) = dwColour; // draw the character pixel
+                     *(reinterpret_cast<dword *>(pbPixel+1)) = 0; // draw the "shadow"
+                     *(reinterpret_cast<dword *>(pbPixel+CPC.scr_line_offs)) = 0;
+                     *(reinterpret_cast<dword *>(pbPixel+CPC.scr_line_offs+1)) = 0;
+                     *(reinterpret_cast<dword *>(pbPixel)) = dwColour; // draw the character pixel
+                     *(reinterpret_cast<dword *>(pbPixel+CPC.scr_bps)) = dwColour; // draw the second line in case dwYScale == 2 (will be overwritten by shadow otherwise)
                   }
                   pbPixel += 3; // update the screen position
                   bRow <<= 1; // advance to the next bit
                }
-               pdwLine += CPC.scr_line_offs; // advance to next screen line
+               pbLine += CPC.scr_line_offs; // advance to next screen line
                iIdx += FNT_CHARS; // advance to next row in font data
             }
-            pdwAddr += FNT_CHAR_WIDTH-2; // set screen address to next character position
+            pbAddr += FNT_CHAR_WIDTH*3; // set screen address to next character position
          }
          break;
 
       case 15:
       case 16:
          wColour = bolColour ? 0xffff : 0;
-         iLen = strlen(pchStr); // number of characters to process
          for (int n = 0; n < iLen; n++) {
-            dword *pdwLine;
-            word *pwPixel;
             iIdx = static_cast<int>(pchStr[n]); // get the ASCII value
             if ((iIdx < FNT_MIN_CHAR) || (iIdx > FNT_MAX_CHAR)) { // limit it to the range of chars in the font
                iIdx = FNT_BAD_CHAR;
             }
             iIdx -= FNT_MIN_CHAR; // zero base the index
-            pdwLine = pdwAddr; // keep a reference to the current screen position
+            pbLine = pbAddr; // keep a reference to the current screen position
             for (int iRow = 0; iRow < FNT_CHAR_HEIGHT; iRow++) { // loop for all rows in the font character
-               pwPixel = reinterpret_cast<word *>(pdwLine);
+               pbPixel = pbLine;
                bRow = bFont[iIdx]; // get the bitmap information for one row
                for (int iCol = 0; iCol < FNT_CHAR_WIDTH; iCol++) { // loop for all columns in the font character
                   if (bRow & 0x80) { // is the bit set?
-                     *(pwPixel+1) = 0; // draw the "shadow"
-                     *reinterpret_cast<word *>(reinterpret_cast<dword *>(pwPixel)+CPC.scr_line_offs) = 0;
-                     *(reinterpret_cast<word *>(reinterpret_cast<dword *>(pwPixel)+CPC.scr_line_offs)+1) = 0;
-                     *pwPixel = wColour; // draw the character pixel
+                     *(reinterpret_cast<word *>(pbPixel)+1) = 0; // draw the "shadow"
+                     *(reinterpret_cast<word *>(pbPixel+CPC.scr_line_offs)) = 0;
+                     *(reinterpret_cast<word *>(pbPixel+CPC.scr_line_offs)+1) = 0;
+                     *(reinterpret_cast<word *>(pbPixel)) = wColour; // draw the character pixel
+                     *(reinterpret_cast<word *>(pbPixel+CPC.scr_bps)) = wColour; // draw the second line in case dwYScale == 2 (will be overwritten by shadow otherwise)
                   }
-                  pwPixel++; // update the screen position
+                  pbPixel += 2; // update the screen position
                   bRow <<= 1; // advance to the next bit
                }
-               pdwLine += CPC.scr_line_offs; // advance to next screen line
+               pbLine += CPC.scr_line_offs; // advance to next screen line
                iIdx += FNT_CHARS; // advance to next row in font data
             }
-            pdwAddr += FNT_CHAR_WIDTH/2; // set screen address to next character position
+            pbAddr += FNT_CHAR_WIDTH*2; // set screen address to next character position
          }
          break;
 
       case 8:
          bColour = bolColour ? SDL_MapRGB(back_surface->format,255,255,255) : SDL_MapRGB(back_surface->format,0,0,0);
-         iLen = strlen(pchStr); // number of characters to process
          for (int n = 0; n < iLen; n++) {
-            dword *pdwLine;
-            byte *pbPixel;
             iIdx = static_cast<int>(pchStr[n]); // get the ASCII value
             if ((iIdx < FNT_MIN_CHAR) || (iIdx > FNT_MAX_CHAR)) { // limit it to the range of chars in the font
                iIdx = FNT_BAD_CHAR;
             }
             iIdx -= FNT_MIN_CHAR; // zero base the index
-            pdwLine = pdwAddr; // keep a reference to the current screen position
+            pbLine = pbAddr; // keep a reference to the current screen position
             for (int iRow = 0; iRow < FNT_CHAR_HEIGHT; iRow++) { // loop for all rows in the font character
-               pbPixel = reinterpret_cast<byte *>(pdwLine);
+               pbPixel = pbLine;
                bRow = bFont[iIdx]; // get the bitmap information for one row
                for (int iCol = 0; iCol < FNT_CHAR_WIDTH; iCol++) { // loop for all columns in the font character
                   if (bRow & 0x80) { // is the bit set?
                      *(pbPixel+1) = 0; // draw the "shadow"
-                     *reinterpret_cast<byte *>(reinterpret_cast<dword *>(pbPixel)+CPC.scr_line_offs) = 0;
-                     *(reinterpret_cast<byte *>(reinterpret_cast<dword *>(pbPixel)+CPC.scr_line_offs)+1) = 0;
+                     *(pbPixel+CPC.scr_line_offs) = 0;
+                     *(pbPixel+CPC.scr_line_offs+1) = 0;
                      *pbPixel = bColour; // draw the character pixel
+                     *(pbPixel+CPC.scr_bps) = bColour; // draw the second line in case dwYScale == 2 (will be overwritten by shadow otherwise)
                   }
                   pbPixel++; // update the screen position
                   bRow <<= 1; // advance to the next bit
                }
-               pdwLine += CPC.scr_line_offs; // advance to next screen line
+               pbLine += CPC.scr_line_offs; // advance to next screen line
                iIdx += FNT_CHARS; // advance to next row in font data
             }
-            pdwAddr += FNT_CHAR_WIDTH/4; // set screen address to next character position
+            pbAddr += FNT_CHAR_WIDTH; // set screen address to next character position
          }
          break;
    }
@@ -1491,10 +1486,10 @@ int video_init ()
    }
 
    vid_plugin->lock();
-   CPC.scr_bps = back_surface->pitch / 4; // rendered screen line length (changing bytes to dwords)
+   CPC.scr_bps = back_surface->pitch; // rendered screen line length in bytes
    CPC.scr_line_offs = CPC.scr_bps * dwYScale;
    CPC.scr_pos =
-   CPC.scr_base = static_cast<dword *>(back_surface->pixels); // memory address of back buffer
+   CPC.scr_base = static_cast<byte *>(back_surface->pixels); // memory address of back buffer
    CPC.scr_gui_is_currently_on = false;
 
    vid_plugin->unlock();
@@ -1842,7 +1837,11 @@ void doCleanUp ()
    SDL_Quit();
 }
 
-
+void cleanExit(int returnCode)
+{
+    doCleanUp();
+    exit(returnCode);
+}
 
 // TODO: Deduplicate showVKeyboard and showGui
 void showVKeyboard()
@@ -1916,11 +1915,10 @@ void dumpScreen() {
           LOG_ERROR("Unable to find or open directory " + CPC.sdump_dir + " when trying to take a screenshot. Defaulting to current directory.")
           dir = ".";
    }
-   SDL_Surface* shot = SDL_PNGFormatAlpha(back_surface);
    std::string dumpFile = "screenshot_" + getDateString() + ".png";
    std::string dumpPath = dir + "/" + dumpFile;
    LOG_DEBUG("Dumping screen to " + dumpPath);
-   if (SDL_SavePNG(shot, dumpPath.c_str())) {
+   if (SDL_SavePNG(back_surface, dumpPath)) {
      LOG_DEBUG("Could not write screenshot file to " + dumpPath);
    }
    else {
@@ -1948,11 +1946,11 @@ void dumpSnapshot() {
 
 int cap32_main (int argc, char **argv)
 {
-   dword dwOffset;
    int iExitCondition;
 #ifndef __LIBRETRO__
    bool bolDone;
 #endif
+   bool take_screenshot = false;
    SDL_Event event;
    std::vector<std::string> slot_list;
 
@@ -1965,11 +1963,12 @@ int cap32_main (int argc, char **argv)
       fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError());
       exit(-1);
    }
-   atexit(doCleanUp); // install the clean up routine
+
 #ifndef __LIBRETRO__
+
    if(getcwd(chAppPath, sizeof(chAppPath)-1) == nullptr) { // get the location of the executable
       fprintf(stderr, "getcwd failed: %s\n", strerror(errno));
-      exit(-1);
+      cleanExit(-1);
    }
 #else
 	sprintf(chAppPath,"%s\0",retro_system_data);
@@ -1985,7 +1984,7 @@ int cap32_main (int argc, char **argv)
 
    if (video_init()) {
       fprintf(stderr, "video_init() failed. Aborting.\n");
-      exit(-1);
+      cleanExit(-1);
    }
 
    if (audio_init()) {
@@ -2015,7 +2014,7 @@ int cap32_main (int argc, char **argv)
    // pbGPBuffer to be initialized.
    if (emulator_init()) {
       fprintf(stderr, "emulator_init() failed. Aborting.\n");
-      exit(-1);
+      cleanExit(-1);
    }
 
    // Really load the various drives, if needed
@@ -2100,13 +2099,21 @@ int cap32_main (int argc, char **argv)
                            CPC.scr_window = CPC.scr_window ? 0 : 1;
                            if (video_init()) {
                               fprintf(stderr, "video_init() failed. Aborting.\n");
-                              exit(-1);
+                              cleanExit(-1);
                            }
                            audio_resume();
                            break;
 
                         case CAP32_SCRNSHOT:
-                           dumpScreen();
+                           // Delay taking the screenshot to ensure the frame is complete.
+                           take_screenshot = true;
+                           break;
+
+                        case CAP32_DELAY:
+                           // Reuse boot_time as it is a reasonable wait time for Plus transition between the F1/F2 nag screen and the command line.
+                           // TODO: Support an argument to CAP32_DELAY in autocmd instead.
+                           LOG_VERBOSE("Take into account CAP32_DELAY");
+                           nextVirtualEventFrameCount = dwFrameCountOverall + CPC.boot_time;
                            break;
 
                         case CAP32_WAITBREAK:
@@ -2168,7 +2175,7 @@ int cap32_main (int argc, char **argv)
                            break;
 
                         case CAP32_EXIT:
-                           exit (0);
+                           cleanExit (0);
                            break;
 
                         case CAP32_FPS:
@@ -2271,7 +2278,7 @@ int cap32_main (int argc, char **argv)
                break;
 
             case SDL_QUIT:
-               exit(0);
+               cleanExit(0);
          }
       }
 
@@ -2310,11 +2317,11 @@ int cap32_main (int argc, char **argv)
          if (!vid_plugin->lock()) { // lock the video buffer
            continue; // skip the emulation if we can't get a lock
          }
-         dwOffset = CPC.scr_pos - CPC.scr_base; // offset in current surface row
+         dword dwOffset = CPC.scr_pos - CPC.scr_base; // offset in current surface row
          if (VDU.scrln > 0) {
-            CPC.scr_base = static_cast<dword *>(back_surface->pixels) + (VDU.scrln * CPC.scr_line_offs); // determine current position
+            CPC.scr_base = static_cast<byte *>(back_surface->pixels) + (VDU.scrln * CPC.scr_line_offs); // determine current position
          } else {
-            CPC.scr_base = static_cast<dword *>(back_surface->pixels); // reset to surface start
+            CPC.scr_base = static_cast<byte *>(back_surface->pixels); // reset to surface start
          }
          CPC.scr_pos = CPC.scr_base + dwOffset; // update current rendering position
 
@@ -2327,11 +2334,11 @@ int cap32_main (int argc, char **argv)
 
             if (breakPointsToSkipBeforeProceedingWithVirtualEvents>0) {
                breakPointsToSkipBeforeProceedingWithVirtualEvents--;
-               LOG_INFO("Decremented breakpoint skip counter to " << breakPointsToSkipBeforeProceedingWithVirtualEvents);
+               LOG_DEBUG("Decremented breakpoint skip counter to " << breakPointsToSkipBeforeProceedingWithVirtualEvents);
             }
          } else {
             if (z80.break_point == 0xffffffff) { // TODO(cpcitor) clean up 0xffffffff into a value like Z80_BREAKPOINT_NONE
-               LOG_INFO("Rearming EC_BREAKPOINT.");
+               LOG_DEBUG("Rearming EC_BREAKPOINT.");
                z80.break_point = 0; // set break point for next time
             }
          }
@@ -2340,18 +2347,25 @@ int cap32_main (int argc, char **argv)
             dwFrameCountOverall++;
             dwFrameCount++;
             if (SDL_GetTicks() < osd_timing) {
-               print(static_cast<dword *>(back_surface->pixels) + CPC.scr_line_offs, osd_message.c_str(), true);
+               print(static_cast<byte *>(back_surface->pixels) + CPC.scr_line_offs, osd_message.c_str(), true);
             } else if (CPC.scr_fps) {
                char chStr[15];
                sprintf(chStr, "%3dFPS %3d%%", static_cast<int>(dwFPS), static_cast<int>(dwFPS) * 100 / (1000 / static_cast<int>(FRAME_PERIOD_MS)));
-               print(static_cast<dword *>(back_surface->pixels) + CPC.scr_line_offs, chStr, true); // display the frames per second counter
+               print(static_cast<byte *>(back_surface->pixels) + CPC.scr_line_offs, chStr, true); // display the frames per second counter
             }
             asic_draw_sprites();
             vid_plugin->unlock();
             video_display(); // update PC display
+
 #ifdef __LIBRETRO__
 	    co_switch(mainThread);
 #endif
+
+            if (take_screenshot) {
+              dumpScreen();
+              take_screenshot = false;
+            }
+
          } else {
             vid_plugin->unlock();
          }

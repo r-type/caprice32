@@ -42,7 +42,7 @@ void usage(std::ostream &os, char *progPath, int errcode)
    os << "Ports files are identified by their extension. Supported formats are .dsk (disk), .cdt or .voc (tape), .cpr (cartridge), .sna (snapshot), or .zip (archive containing one or more of the supported ports files).\n";
    os << "\nExample: " << progname << " sorcery.dsk\n";
    os << "\nPress F1 when the emulator is running to show the in-application option menu.\n";
-   os << "See https://github.com/ColinPitrat/caprice32 for more extensive information.\n";
+   os << "\nSee https://github.com/ColinPitrat/caprice32 or check the man page (man cap32) for more extensive information.\n";
    exit(errcode);
 }
 
@@ -70,6 +70,7 @@ std::string replaceCap32Keys(std::string command)
     { "CAP32_TAPEPLAY", cap32_keystroke(CAP32_TAPEPLAY) },
     { "CAP32_DEBUG", cap32_keystroke(CAP32_DEBUG) },
     { "CAP32_WAITBREAK", cap32_keystroke(CAP32_WAITBREAK) },
+    { "CAP32_DELAY", cap32_keystroke(CAP32_DELAY) },
     { "CPC_F1", cpc_keystroke(CPC_F1) },
     { "CPC_F2", cpc_keystroke(CPC_F2) },
   };
@@ -79,6 +80,7 @@ std::string replaceCap32Keys(std::string command)
     while ((pos = command.find(elt.first)) != std::string::npos)
     {
       command.replace(pos, elt.first.size(), elt.second);
+      LOG_VERBOSE("Recognized keyword: " << elt.first);
     }
   }
   return command;
@@ -101,6 +103,7 @@ void parseArguments(int argc, char **argv, std::vector<std::string>& slot_list, 
       switch (c)
       {
          case 'a':
+            LOG_VERBOSE("Append to autocmd: " << optarg);
             args.autocmd += replaceCap32Keys(optarg);
             args.autocmd += "\n";
             break;

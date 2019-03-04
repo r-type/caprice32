@@ -21,6 +21,7 @@
 */
 
 #include "cap32.h"
+#include "disk.h"
 #include "z80.h"
 
 extern t_CPC CPC;
@@ -237,7 +238,8 @@ inline void cmd_write()
          sector_size = 128 << FDC.command[CMD_N]; // determine number of bytes from N value
       }
       FDC.buffer_count = sector_size; // init number of bytes to transfer
-      FDC.buffer_ptr = sector->data; // pointer to sector data
+      // Note: do not handle writing to weak sectors (would need to write to all of them ?)
+      FDC.buffer_ptr = sector->getDataForWrite(); // pointer to sector data
       FDC.buffer_endptr = active_track->data + active_track->size; // pointer beyond end of track data
       FDC.timeout = INITIAL_TIMEOUT;
       read_status_delay = 1;
@@ -295,7 +297,7 @@ loop:
             sector_size = 128 << FDC.command[CMD_N]; // determine number of bytes from N value
          }
          FDC.buffer_count = sector_size; // init number of bytes to transfer
-         FDC.buffer_ptr = sector->data; // pointer to sector data
+         FDC.buffer_ptr = sector->getDataForRead(); // pointer to sector data
          FDC.buffer_endptr = active_track->data + active_track->size; // pointer beyond end of track data
          FDC.timeout = INITIAL_TIMEOUT;
          read_status_delay = 1;
@@ -335,7 +337,7 @@ inline void cmd_readtrk()
       sector_size = 128 << FDC.command[CMD_N]; // determine number of bytes from N value
    }
    FDC.buffer_count = sector_size; // init number of bytes to transfer
-   FDC.buffer_ptr = sector->data; // pointer to sector data
+   FDC.buffer_ptr = sector->getDataForRead(); // pointer to sector data
    FDC.buffer_endptr = active_track->data + active_track->size; // pointer beyond end of track data
    FDC.timeout = INITIAL_TIMEOUT;
    read_status_delay = 1;
@@ -373,7 +375,7 @@ loop:
          }
          sector_size = 128 << FDC.command[CMD_N]; // determine number of bytes from N value
          FDC.buffer_count = sector_size; // init number of bytes to transfer
-         FDC.buffer_ptr = sector->data; // pointer to sector data
+	 FDC.buffer_ptr = sector->getDataForRead(); // pointer to sector data
          FDC.buffer_endptr = active_track->data + active_track->size; // pointer beyond end of track data
          FDC.flags &= ~SCANFAILED_flag; // reset scan failed flag
          FDC.result[RES_ST2] |= 0x08; // assume data matches: set Scan Equal Hit
@@ -529,7 +531,7 @@ void fdc_write_data(byte val)
                      for (sector = 0; sector < FDC.command[CMD_H]; sector++) {
                         memcpy(active_track->sector[sector].CHRN, pbPtr, 4); // copy CHRN
                         memset(active_track->sector[sector].flags, 0, 2); // clear ST1 & ST2
-                        active_track->sector[sector].data = pbDataPtr; // store pointer to sector data
+                        active_track->sector[sector].setData(pbDataPtr); // store pointer to sector data
                         pbDataPtr += sector_size;
                         pbPtr += 4;
                      }
